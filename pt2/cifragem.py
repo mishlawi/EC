@@ -36,11 +36,11 @@ def prg(seed,N):
 
 # generate 2^N msg words
 
-
 def pad_divide(message):
     x = []
     for i in range (0,len(message), BLOCK):
-        x.append(message[i:i+BLOCK])
+        next = i+BLOCK
+        x.append(message[i:next])
     return x
 
 def cipher(k,msg):

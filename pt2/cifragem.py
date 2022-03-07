@@ -1,14 +1,3 @@
-"""
-2. Criar uma cifra com autenticação de meta-dados a partir de um PRG
-    1. Criar um gerador pseudo-aleatório do tipo XOF (“extened output function”)
-     usando o SHAKE256, para gerar uma sequência de palavras de 64 bits. 
-        1. O gerador deve poder gerar até um limite de $$\,2^n\,$$ palavras ($$n$$ é  um parâmetro) armazenados em long integers do Python.
-        2. A “seed” do gerador funciona como $$\mathtt{cipher\_key}$$ e é gerado por um KDF a partir de uma “password” .
-        3. A autenticação do criptograma e dos dados associados é feita usando o próprio SHAKE256.
-    b. Defina os algoritmos de cifrar e decifrar : para cifrar/decifrar uma mensagem com blocos de 64 bits, os “outputs” do gerador são usados como máscaras XOR dos blocos da mensagem. 
-    Essencialmente a cifra básica é uma implementação do  “One Time Pad”.
-"""
-from email import message
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import padding
@@ -24,16 +13,18 @@ import os
 #
 BLOCK = 8 
 
-# Basically deriving a key from a specific password
+# Basically deriving a key from a specific password - kdf
+
 def derive_key(password):
     salt = os.urandom(16)
     kdf = PBKDF2HMAC(
-    algorithm=hashes.SHA256(),
-    length=32,
-    salt=salt,
-    iterations=100000)
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+        )
 
-    return kdf.derive(password) # returns the key derived from the password
+    return kdf.derive(password) # returns the key derived from the password aka cipher_key
 
 
 # generates char sequence to be used to cipher the data
@@ -58,13 +49,13 @@ def cipher(k,msg):
     
     # adds padding to the last block of bytes of the message -> this garantees that the block size is multiple
     # basically stuffs the last block with pad chars 
-    padded = pad.update(message) + pad.finalize()
+    padded = pad.update(msg) + pad.finalize()
     # mesage is divided in blocks of 8 bytes
     p = pad_divide(padded)
 
     for x in range (len(p)): # Percorre blocos do texto limpo
         for bloco, byte in enumerate(p[x]): # Percorre bytes do bloco do texto limpo
-            ciphertext += bytes([byte ^ k[x:(x+1)*BLOCK][bloco]]) 
+            ciphertext += bytes([byte ^ k[x:(x+1)*BLOCK][bloco]]) # xor of 2 bit sequences plain text and cipher_key
     return ciphertext
 
 
@@ -75,7 +66,7 @@ def decipher(k,ciphertext):
 
     for x in range (len(p)): # Percorre blocos do texto cifrado
         for bloco, byte in enumerate(p[x]): # Percorre bytes do bloco do texto cifrado
-            plaintext += bytes([byte ^ k[x:(x+1)*BLOCK_SIZE][bloco]]) 
+            plaintext += bytes([byte ^ k[x:(x+1)*BLOCK][bloco]]) 
     
     # Algoritmo para retirar padding para decifragem
     unpadder = padding.PKCS7(64).unpadder()
@@ -83,3 +74,14 @@ def decipher(k,ciphertext):
     unpadded = unpadder.update(plaintext) + unpadder.finalize()
     return unpadded.decode("utf-8")
     
+cipher_key = derive_key(b'password')
+msg = prg(cipher_key,2)
+mensagem = b"Ultra secret message"
+
+ct = cipher(msg,mensagem)
+dt = decipher(msg,ct)
+
+
+print("OG TEXT: ", mensagem)
+print("CT:  ", ct)
+print("DT:  ", dt)

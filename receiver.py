@@ -1,65 +1,57 @@
-from cryptography.hazmat.primitives import hashes 
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import os
+from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives.asymmetric import dh
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-import cryptography
-import hmac
-import hashlib
-
-KEY_DIGEST_LEN = 32 # Bytes
-NONCE_LEN = 12 # Bytes
-SALT_LEN = 16 # Bytes
 
 class Receiver:
-    def __init__(self):
-      self.key = None
+    def __init__(self,parameters):
+      self.dh_parameters = parameters
+      self.private_key = None
+      self.derived_key = None
     
-    def derivate_key(self, dados):
-      salt = self.unpack_data(dados)[-2]
-      kdf = PBKDF2HMAC(algorithm=hashes.SHA256(),length=32,salt=salt,iterations=390000,)
-      self.key = kdf.derive(b'my great password')
+    def get_public_key(self):
+        self.private_key = self.dh_parameters.generate_private_key()
+        return self.private_key.public_key()
+
+    def derivate_key(self,emmiter_public):
+        shared_key = self.private_key.exchange(emmiter_public)
+        
+        self.derived_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b'handshake data',
+        ).derive(shared_key)
+
+        return self.derived_key
     
     def unpack_data(self, dados):
-      # dados : key_digest + nonce + salt + mensagem
-      # 0 - 31 : key_digest (32 bytes)
-      # 32 - 43 : nonce para decode (12 bytes)
-      # 44 - 59 : salt para derivar chave (16 bytes)
-      # 60 ... : texto cifrado
-      key_digest = dados[:KEY_DIGEST_LEN]
-      nonce = dados[KEY_DIGEST_LEN:KEY_DIGEST_LEN + NONCE_LEN]
-      salt = dados[KEY_DIGEST_LEN + NONCE_LEN:KEY_DIGEST_LEN + NONCE_LEN + SALT_LEN]
-      ct = dados[KEY_DIGEST_LEN + NONCE_LEN + SALT_LEN:]
+      signature = dados[0:32]
+      nonce = dados[32:32+16]
+      ct = dados[32+16:]
+
+      return signature, nonce, ct
+
+    def verify(self,signature):
+      h = hmac.HMAC(self.derived_key, hashes.SHA256())
+      h.update(b'this is a message to check the signature')
+      return h.verify(signature)
       
-      return key_digest, ct, salt, nonce
-    
+
     def read_message(self, ct):
-      key_digest, ct, salt, nonce = self.unpack_data(ct)
-      h = hmac.new(self.key, None, hashlib.sha256)
-      # gera digest para a mensagem
-      h.update(ct)
-      new_digest = h.digest()
+      signature, nonce, ct = self.unpack_data(ct)
       try :
           # verifica se o digest gerado acima é igual ao digest recebido como parâmetro
-          new_digest == key_digest
+          self.verify(signature)
       except:
-        raise Exception("Falha na autenticidade da chave") 
-        
-      metadata = salt + nonce 
+          raise Exception("Falha na autenticidade da chave") 
 
-      aesgcm = AESGCM(self.key)
-      try:
-          texto_limpo = aesgcm.decrypt(nonce, ct, metadata)
-      except cryptography.exceptions.InvalidTag:
-          # Falha na verificação da autenticidade 
-          error_code, texto_limpo = 1, None
-      error_code, texto_limpo = None, texto_limpo.decode('utf-8')
-
-      self.show_results(error_code,texto_limpo)
+      aesgcm = AESGCM(self.derived_key)
+      texto_limpo = aesgcm.decrypt(nonce, ct, b'some associated data')
     
-    def show_results(self, error, message):
-        if error == None:
-            print("Texto decifrado: %s" %message)
-        elif error == 1:
-            print("Falha na verificação da autenticidade.")
+      return texto_limpo.decode('utf-8')
+  
 
 
 

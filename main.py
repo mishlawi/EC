@@ -1,28 +1,30 @@
 from emitter import Emitter
 from receiver import Receiver
+from cryptography.hazmat.primitives.asymmetric import dh
+import time
 
-#def read_input():
-    #password = input("Insira a sua password: ")
-    #return password
 
 def main():
-    # Leitura password do emmiter
-    #password = read_input()
-    emmiter = Emitter()
-    # Deriva chave do emitter
-    emmiter.derivate_key()
-    # Emmiter envia dados: key_digest + nonce + salt + mensagem
+    parameters = dh.generate_parameters(generator=2, key_size=1024)
+    # Cria instâncias dos agentes
+    emmiter = Emitter(parameters)
+    receiver = Receiver(parameters)
+    
+    # Deriva chaves
+    emmiter.derivate_key(receiver.get_public_key())
+    receiver.derivate_key(emmiter.get_public_key())
+    
+    start = time.time_ns()
+    # Emmiter envia dados: mensagem + assinatura
     dados = emmiter.send_message("Segredo que não se pode partilhar")
-
-    # print('Texto cifrado:',dados)
-    # Leitura password do receiver
-    #password = read_input()
-    receiver = Receiver()
-    # Deriva chave do receiver
-    receiver.derivate_key(dados)
+    print('encrypted text:',dados)
+    
     try:
         # Receiver decifra mensagem
-        receiver.read_message(dados)
+        pt = receiver.read_message(dados)
+        stop = time.time_ns()
+        print('decrypted text:', pt)
+        print('elapsed time:', (stop-start), 'ns')
     except:
         # Falha na autenticação da chave
         print("Falha na autenticação da chave")  

@@ -5,13 +5,11 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 class Emitter:
     def __init__(self,parameters):
-        self.dh_parameters = parameters
-        self.private_key = None
+        self.private_key = parameters.generate_private_key()
         self.derived_key = None
       
-    def derivate_key(self,receiver_public):
-        self.private_key = self.dh_parameters.generate_private_key()
-        shared_key = self.private_key.exchange(receiver_public)
+    def derivate_key(self,public):
+        shared_key = self.private_key.exchange(public)
         
         self.derived_key = HKDF(
             algorithm=hashes.SHA256(),

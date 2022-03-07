@@ -18,15 +18,15 @@ def main():
     # Emmiter envia dados: mensagem + assinatura
     dados = emmiter.send_message("Segredo que não se pode partilhar")
     print('encrypted text:',dados)
-    
+
     try:
         # Receiver decifra mensagem
         pt = receiver.read_message(dados)
         stop = time.time_ns()
+
         print('decrypted text:', pt)
         print('elapsed time:', (stop-start), 'ns')
     except:
-        # Falha na autenticação da chave
         print("Falha na autenticação da chave")  
     
 

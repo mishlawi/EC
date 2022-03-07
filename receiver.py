@@ -1,21 +1,17 @@
-import os
 from cryptography.hazmat.primitives import hashes, hmac
-from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 class Receiver:
     def __init__(self,parameters):
-      self.dh_parameters = parameters
-      self.private_key = None
+      self.private_key = parameters.generate_private_key()
       self.derived_key = None
     
     def get_public_key(self):
-        self.private_key = self.dh_parameters.generate_private_key()
         return self.private_key.public_key()
 
-    def derivate_key(self,emmiter_public):
-        shared_key = self.private_key.exchange(emmiter_public)
+    def derivate_key(self,public):
+        shared_key = self.private_key.exchange(public)
         
         self.derived_key = HKDF(
             algorithm=hashes.SHA256(),

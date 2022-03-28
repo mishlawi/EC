@@ -6,59 +6,59 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
+
+
+# basicamente o ED448
+
 class receiver:
 
     X448_private_key = b""
     X448_public_key = b""
     X448_shared_key = b""
     
-    tweakable = b""
-    complete_key = b""
+    tweak = b""
+    ck = b""  # complete key aka the one who will cipher 
 
-    signing_message = b"Signing Message"
+    assinatura = b"Signing Message"    
+
+#acordo de chaves feito com “X448 key exchange” e “Ed448 Signing&Verification” para autenticação  dos agentes
 
 
     def check_Ed448_signature(self, signature, public_key):
-        
-        if public_key.verify(signature, self.signing_message):
+        try:
+            public_key.verify(signature, self.assinatura)
             print("Sucesso na autenticação ed448")
-        else:
+        except cryptography.exceptions.InvalidSignature:
             print("Erro na autenticação da assinatura ed448")
 
 
-
-
-    def generate_X448_private_key(self):
-        # Generate a private key for use in the exchange.
+    # Generate a private key for use in the exchange.
+    def privateKeyGenX448(self):
         self.X448_private_key = X448PrivateKey.generate()
     
-    def generate_X448_public_key(self):
+    def publicKeyGenX448(self):
         self.X448_public_key = self.X448_private_key.public_key()
 
-    def generate_X448_shared_key(self, X448_emitter_public_key):
+    def sharedKeyGenX448(self, X448_emitter_public_key):
         key = self.X448_private_key.exchange(X448_emitter_public_key)
 
         self.X448_shared_key = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
             salt=None,
-            info=b'handshake data',
+            info=b'handshake assinatura',
         ).derive(key)
 
 
-    def set_tweak(self, tweak):
-        self.tweakable = tweak
+    def create_ck(self):
 
-
-    def create_complete_key(self):
-
-        print("Create the complete key...")
-        self.complete_key = self.X448_shared_key + self.tweakable
+        print("A criar a chave completa.")
+        self.ck = self.X448_shared_key + self.tweak
 
     def confirm_key_agreement(self, ct):
         
         nonce = ct[:16]
-        key = ct[16:]
+        key = ct[16:]   
 
         algorithm = algorithms.ChaCha20(self.X448_shared_key, nonce)
         cipher = Cipher(algorithm, mode=None)
@@ -74,30 +74,34 @@ class receiver:
         return
 
 
+    def verify_Auth(self, ck,message, signature):
+        h = hmac.HMAC(ck, hashes.SHA256())
+        h.update(message)
+        try: 
+            h.verify(signature)
+            return True
+        except:
+            return False
 
-
-    def decrypt_message(self, ciphertext):
-
-        mac = ciphertext[32]
+    def decipher(self, ciphertext,receiver):
+        
+        complete_key = receiver.ck
+        signature = ciphertext[32]
         ct = ciphertext[32:]
 
-        try:
-            h = hmac.HMAC(self.complete_key, hashes.SHA256(), backend=default_backend())
-            h.update(ct)
-            h.verify(mac)
-            print("Autenticação da mensagem com sucesso")
-        except:
-            print("Autenticação da mensagem sem sucesso")
-            return
+        if self.verify_Auth(complete_key, ct, signature):
+            print("Autenticação do criptograma")
+        else:
+            print("Falha na autenticação do criptograma!")
 
-
+        print("passou")
         clear_text = b''
             
         # XOR METODO
         for x in range (0,len(ct),8):
             b = ct[x:x+8]
             for index, byte in enumerate(b):   
-                clear_text += bytes([byte ^ self.complete_key[x*8:(x+1)*8][index]])
+                clear_text += bytes([byte ^ self.ck[x*8:(x+1)*8][index]])
 
         # Algoritmo para retirar padding para decifragem
         unpadder = padding.PKCS7(64).unpadder()
@@ -107,15 +111,3 @@ class receiver:
 
         print(unpadded_message.decode("UTF-8"))
 
-
-    #def create_tweakable(self, nonce):
-        
-    #    print("Create tweakable block cipher...")
-        
-    #    key_l = self.X448_shared_key[0:32]
-    #    key_f = self.X448_shared_key[32:]
-    #    algorithm = algorithms.ChaCha20(key_l, nonce)
-    #    cipher = Cipher(algorithm, mode=None)
-    #    ct = cipher.encryptor()
-    #    self.tweakable = ct.update(b"Tweakable")
-    #    return

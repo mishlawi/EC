@@ -1,8 +1,7 @@
+import os
 from emitter import emitter
 from receiver import receiver 
-import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
-
 
 
 # 1. Use o “package” Cryptography para
@@ -12,17 +11,16 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 
 
 
-# tweakable block cipher é um parâmetro que permite ser associado à chave e fará parte do processo de cifragem
-#Ou seja, temos de criar uma chave, um tweakable e juntar os dois e encriptar as cenas
-
-
+# Parâmetro que permite ser associado à chave e fará parte do processo de cifragem ->  tweakable block cipher
+# Ou seja, temos de criar uma chave, um tweakable e juntar os dois e encriptar as cenas
 
 
 #AEAD terá de ser construído por nós e é do tipo E&M
 
 #AEAD do tipo E&M
-def create_tweakable(key):
 
+
+def create_tweakable(key):
     
     nounce = os.urandom(16)
     algorithm = algorithms.ChaCha20(key, nounce)
@@ -31,50 +29,58 @@ def create_tweakable(key):
     tweak = ct.update(b"Tweakable")
     return tweak
 
+#Agent Auth 
+#1
 
+def ed448_setup(emitter):
+    emitter.ed448privateKeygen()
+    emitter.ed448signatureGen()
+    emitter.ed448publicKeygen()
+    print("setup do ED448 no emmiter")
+    print("\n\n\n\n")
+
+#Setup do Key exchange (X448)
+# 2
+def x448keys(emitter,receiver):
+    emitter.privateKeyGenX448()
+    receiver.privateKeyGenX448()
+    # chaves privadas geradas 1o porque as publicas sao geradas a partir delas
+    print("chaves privadas geradas no receiver e no emitter")
+    emitter.publicKeyGenX448()
+    receiver.publicKeyGenX448()
+    print("chaves publicas geradas no receiver e no emitter")
+    print("\n\n\n\n")
+#3
+def sharedkeygen(emitter,receiver):
+    
+    emitter.sharedKeyGenX448(receiver.X448_public_key)
+    print("chave partilhada do emiter criada")
+    receiver.sharedKeyGenX448(emitter.X448_public_key)
+    print("chave partilhada do receiver criada")
 
 
 emitter = emitter()
+emitter.message=b"Hello12"
 receiver = receiver()
-
-
-
-#Autenticação dos agentes
-print("Setup do ED448 (Autenticação dos agentes)")
-emitter.generate_Ed448_private_key()
-emitter.generate_Ed448_signature()
-emitter.generate_Ed448_public_key()
-
+ed448_setup(emitter)
 receiver.check_Ed448_signature(emitter.signature, emitter.Ed448_public_key)
-
-
-
-#Setup do Key exchange (X448)
-print("Setup do X448 (Key Exchange)")
-emitter.generate_X448_private_key()
-receiver.generate_X448_private_key()
-
-emitter.generate_X448_public_key()
-receiver.generate_X448_public_key()
-
-emitter.generate_X448_shared_key(receiver.X448_public_key)
-receiver.generate_X448_shared_key(emitter.X448_public_key)
-
-
+x448keys(emitter,receiver)
+sharedkeygen(emitter,receiver)
 # Verificação de se as chaves foram bem acordadas
 key_ciphertext = emitter.confirm_key_agreement()
 receiver.confirm_key_agreement(key_ciphertext)
 
 
 tweak = create_tweakable(emitter.X448_shared_key)
-emitter.set_tweak(tweak)
-receiver.set_tweak(tweak)
+emitter.tweak = tweak
+receiver.tweak = tweak
 
 
-emitter.create_complete_key()
-receiver.create_complete_key()
+emitter.create_ck()
+receiver.create_ck()
 
-ciphertext = emitter.encrypt_message()
-receiver.decrypt_message(ciphertext)
+ciphertext = emitter.cipher()
+print("Texto cifrado: ", ciphertext)
+receiver.decipher(ciphertext,receiver)
 
 
